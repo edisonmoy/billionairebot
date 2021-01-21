@@ -1,10 +1,17 @@
+import simplejson as json
+from websocket import create_connection
 import requests
 import os
 from dotenv import load_dotenv
+import threading
+import ast
+import time
+
 
 load_dotenv()
 
 AV_KEY = os.getenv("ALPHA_VANTAGE_KEY")
+TIINGO_KEY = os.getenv("TIINGO_KEY")
 AV_BASE_URL = f"https://www.alphavantage.co/query?apikey={AV_KEY}"
 
 
@@ -49,7 +56,7 @@ class StockData:
     def price_daily(self, size="compact"):
         '''
         Return price data from daily interval.
-        Size: compact provides 100 days (default) or full for 20yrs. 
+        Size: compact provides 100 days (default) or full for 20yrs.
         '''
         request_args = {
             "function": "TIME_SERIES_DAILY_ADJUSTED", "outputsize": size}
@@ -59,5 +66,118 @@ class StockData:
         return data
 
 
-a = StockData("MSFT")
-print(a.price_five_min())
+class StockSocket:
+    '''
+    Websocket used to strean stock data as it becomes available in real time. Can
+    add any number of tickers to socket stream. 
+    '''
+
+    def __init__(self):
+        self.sub_id = None
+        self.thread_lock = threading.Lock()
+        self.tickers = {}
+
+        # Create websocket connection
+        try:
+            x = threading.Thread(target=self.__create_websocket)
+            x.start()
+        except:
+            print("Can't start thread")
+
+    def __create_websocket(self):
+        '''
+        Initiate websocket connection.
+
+        Lock is used to ensure websocket is open and self.sub_id is assigned 
+        before changing tickers.
+        '''
+        self.thread_lock.acquire()
+
+        # Connect to socket and send payload
+        ws = create_connection("wss://api.tiingo.com/iex")
+        payload = {
+            'eventName': 'subscribe',
+            'authorization': TIINGO_KEY,
+            'eventData': {
+                'thresholdLevel': 5,
+            }
+        }
+        ws.send(json.dumps(payload))
+
+        # Print data until thread is killed
+        while True:
+            response = ws.recv()
+            print(response)
+            # If opening connection, assign self.sub_idfor future reference
+            if self.sub_id is None:
+                try:
+                    response_dict = ast.literal_eval(response)
+                    sub_id = response_dict.get(
+                        "data").get("subscriptionId")
+                    self.sub_id = sub_id
+                    self.thread_lock.release()
+                except:
+                    print("Can't parse subscription id")
+
+    def add_ticker(self, ticker):
+        '''
+        Add ticker to websocket.
+
+        Lock is used to ensure websocket is open and self.sub_id is assigned 
+        before adding tickers.
+        '''
+        self.thread_lock.acquire()
+
+        # Connect to socket and send payload
+        ws = create_connection("wss://api.tiingo.com/iex")
+        payload = {
+            'eventName': 'subscribe',
+            'authorization': TIINGO_KEY,
+            'eventData': {
+                'subscriptionId': self.sub_id,
+                'thresholdLevel': 5,
+                'tickers': [ticker]
+            }
+        }
+        ws.send(json.dumps(payload))
+        print(ws.recv())
+        self.thread_lock.release()
+
+    def remove_ticker(self, ticker):
+        '''
+        Remove ticker from websocket.
+
+        No error if given ticker is not being tracked by websocket.
+        '''
+        ws = create_connection("wss://api.tiingo.com/iex")
+        payload = {
+            'eventName': 'unsubscribe',
+            'authorization': TIINGO_KEY,
+            'eventData': {
+                'subscriptionId': self.sub_id,
+                'tickers': [ticker]
+            }
+        }
+        ws.send(json.dumps(payload))
+        print(ws.recv())
+
+
+def monitor(tickers):
+    '''
+    Monitor ticker list from websocket
+    '''
+
+    stock_socket = StockSocket()
+
+    # Create thread and open websocket for each ticker
+    for ticker in tickers:
+        try:
+            stock_socket.add_ticker(ticker)
+        except:
+            print("Cannot add " + ticker)
+
+    time.sleep(3)
+    stock_socket.remove_ticker('aapl')
+
+
+monitor(["spy", "gme"])
