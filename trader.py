@@ -1,4 +1,4 @@
-import simplejson as json
+import json
 from websocket import create_connection
 import requests
 import os
@@ -69,7 +69,7 @@ class StockData:
 class StockSocket:
     '''
     Websocket used to strean stock data as it becomes available in real time. Can
-    add any number of tickers to socket stream. 
+    add any number of tickers to socket stream.
     '''
 
     def __init__(self):
@@ -88,7 +88,7 @@ class StockSocket:
         '''
         Initiate websocket connection.
 
-        Lock is used to ensure websocket is open and self.sub_id is assigned 
+        Lock is used to ensure websocket is open and self.sub_id is assigned
         before changing tickers.
         '''
         self.thread_lock.acquire()
@@ -100,24 +100,31 @@ class StockSocket:
             'authorization': TIINGO_KEY,
             'eventData': {
                 'thresholdLevel': 5,
+                'tickers': ['spy']
+
             }
         }
         ws.send(json.dumps(payload))
 
         # Print data until thread is killed
         while True:
-            response = ws.recv()
+            response = json.loads(ws.recv())
             print(response)
             # If opening connection, assign self.sub_idfor future reference
             if self.sub_id is None:
                 try:
-                    response_dict = ast.literal_eval(response)
-                    sub_id = response_dict.get(
+                    sub_id = response.get(
                         "data").get("subscriptionId")
                     self.sub_id = sub_id
                     self.thread_lock.release()
                 except:
                     print("Can't parse subscription id")
+            else:
+                try:
+                    if response.get("messageType") == "A":
+                        print(response.get("data"))
+                except:
+                    print("Can't parse response")
 
     def add_ticker(self, ticker):
         '''
@@ -169,7 +176,7 @@ def monitor(tickers):
 
     stock_socket = StockSocket()
 
-    # Create thread and open websocket for each ticker
+    # Add tickers to connection
     for ticker in tickers:
         try:
             stock_socket.add_ticker(ticker)
