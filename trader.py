@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-AV_KEY = os.getenv("ALPHA_VINTAGE_KEY")
+AV_KEY = os.getenv("ALPHA_VANTAGE_KEY")
 AV_BASE_URL = f"https://www.alphavantage.co/query?apikey={AV_KEY}"
 
 
@@ -16,7 +16,7 @@ class StockData:
         '''
         Returns request URL given arguments in dict
         '''
-        request_url = AV_BASE_URL
+        request_url = AV_BASE_URL + "&symbol="+self.ticker
         for key in args_map:
             request_url += f'&{key}={args_map[key]}'
         return request_url
@@ -27,7 +27,7 @@ class StockData:
         Interval: 1, 5, 15, 30, 60min
         '''
         request_args = {"function": "TIME_SERIES_INTRADAY",
-                        "symbol": self.ticker, "interval": interval}
+                        "interval": interval}
         request_url = self.request_builder(request_args)
         print(request_url)
 
@@ -60,4 +60,4 @@ class StockData:
 
 
 a = StockData("MSFT")
-# print(a.price_one_min())
+print(a.price_five_min())
