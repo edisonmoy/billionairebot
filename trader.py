@@ -6,20 +6,35 @@ from dotenv import load_dotenv
 import threading
 import ast
 import time
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import uuid
+from tqdm import tqdm
 
 
 load_dotenv()
 
 AV_KEY = os.getenv("ALPHA_VANTAGE_KEY")
-TIINGO_KEY = os.getenv("TIINGO_KEY")
 AV_BASE_URL = f"https://www.alphavantage.co/query?apikey={AV_KEY}"
 
+TIINGO_KEY = os.getenv("TIINGO_KEY")
+TIINGO_WEBSOCKET_URL = "wss://api.tiingo.com/iex"
+TIINGO_REST_URL = f"https://api.tiingo.com/iex/?token={TIINGO_KEY}&tickers="
 
-class StockData:
+
+class Stock:
+    '''
+    Used to hold and gather data about given ticker
+    '''
+
     def __init__(self, ticker):
         self.ticker = ticker
 
-    def request_builder(self, args_map):
+        # Get latest stock prices
+        self.update()
+
+    def __request_builder(self, args_map):
         '''
         Returns request URL given arguments in dict
         '''
@@ -35,35 +50,84 @@ class StockData:
         '''
         request_args = {"function": "TIME_SERIES_INTRADAY",
                         "interval": interval}
-        request_url = self.request_builder(request_args)
+        request_url = self.__request_builder(request_args)
         print(request_url)
 
         data = requests.get(request_url).json()
         return data
 
-    def price_one_min(self):
+    def price_daily(self, num_days=100):
         '''
-        Return price data from 1 minute interval.
+        Return num_days of daily prices in dataframe.
         '''
-        return self.intraday_price("1min")
+        if num_days > 100:
+            size = "full"
+        else:
+            size = "compact"
 
-    def price_five_min(self):
-        '''
-        Return price data from 5 minute interval.
-        '''
-        return self.intraday_price("5min")
-
-    def price_daily(self, size="compact"):
-        '''
-        Return price data from daily interval.
-        Size: compact provides 100 days (default) or full for 20yrs.
-        '''
         request_args = {
             "function": "TIME_SERIES_DAILY_ADJUSTED", "outputsize": size}
-        request_url = self.request_builder(request_args)
-        print(request_url)
-        data = requests.get(request_url).json()
-        return data
+        request_url = self.__request_builder(request_args)
+        res = requests.get(request_url).json()
+        date = []
+        colnames = list(range(0, 7))
+        df = pd.DataFrame(columns=colnames)
+        print("Parsing data into a dataframe...")
+        trimmed_data = dict(
+            list(res['Time Series (Daily)'].items())[:num_days])
+        for i in tqdm(trimmed_data.keys()):
+            date.append(i)
+            row = pd.DataFrame.from_dict(
+                trimmed_data[i], orient='index').reset_index().T[1:]
+            df = pd.concat([df, row], ignore_index=True)
+        df.columns = ["open", "high", "low", "close",
+                      "adjusted close", "volume", "dividend amount", "split cf"]
+        df['date'] = date
+        return df
+
+    def update(self):
+        '''
+        Get current ticker prices and update instance
+        '''
+        req_url = TIINGO_REST_URL + self.ticker
+        headers = {
+            'Content-Type': 'application/json'
+        }
+        res = ((requests.get(req_url, headers)).json())[0]
+        self.high = res.get("high")
+        self.low = res.get("low")
+        self.last_price = res.get("last")
+        self.last_size = res.get("lastSize")
+        self.bid_price = res.get("bidPrice")
+        self.bid_size = res.get("bidSize")
+        self.ask_price = res.get("askPrice")
+        self.ask_price = res.get("askSize")
+        return res
+
+    def moving_avg(self, window, age=20):
+        '''
+        Compute moving average given WINDOW.
+        Window: 5,10,30,60min. 1,2,5,10,20day.
+
+        Output array of moving averages from now to AGE samples back.
+        '''
+        id = str(uuid.uuid4())
+
+        return
+
+    def moving_avg_crossover(self):
+        long_term_data = self.price_daily(100)
+
+        # long_term_data.plot.scatter(x="date", y="close")
+        plt.plot(long_term_data["date"],
+                 long_term_data["close"])
+        plt.show()
+        return
+
+
+x = Stock("aapl")
+x.update()
+x.moving_avg_crossover()
 
 
 class StockSocket:
@@ -94,7 +158,7 @@ class StockSocket:
         self.thread_lock.acquire()
 
         # Connect to socket and send payload
-        ws = create_connection("wss://api.tiingo.com/iex")
+        ws = create_connection(TIINGO_BASE_URL)
         payload = {
             'eventName': 'subscribe',
             'authorization': TIINGO_KEY,
@@ -109,20 +173,30 @@ class StockSocket:
         # Print data until thread is killed
         while True:
             response = json.loads(ws.recv())
-            print(response)
-            # If opening connection, assign self.sub_idfor future reference
+            # If opening connection, assign self.sub_id for future reference
             if self.sub_id is None:
                 try:
                     sub_id = response.get(
                         "data").get("subscriptionId")
                     self.sub_id = sub_id
                     self.thread_lock.release()
+                    print("WebSocket Connected")
                 except:
                     print("Can't parse subscription id")
             else:
                 try:
+                    # Parse price updates and append to self.tickers[ticker]
                     if response.get("messageType") == "A":
-                        print(response.get("data"))
+                        data = response.get("data")
+                        if data[0] == "Q":
+                            trade_price = data[7]
+                            trade_size = data[8]
+                        else:
+                            trade_price = data[9]
+                            trade_size = data[10]
+                        ticker = data[3]
+                        timestamp = data[1]
+
                 except:
                     print("Can't parse response")
 
@@ -130,13 +204,13 @@ class StockSocket:
         '''
         Add ticker to websocket.
 
-        Lock is used to ensure websocket is open and self.sub_id is assigned 
+        Lock is used to ensure websocket is open and self.sub_id is assigned
         before adding tickers.
         '''
         self.thread_lock.acquire()
 
         # Connect to socket and send payload
-        ws = create_connection("wss://api.tiingo.com/iex")
+        ws = create_connection(TIINGO_BASE_URL)
         payload = {
             'eventName': 'subscribe',
             'authorization': TIINGO_KEY,
@@ -147,7 +221,8 @@ class StockSocket:
             }
         }
         ws.send(json.dumps(payload))
-        print(ws.recv())
+        print(f"Added {ticker}")
+        self.tickers[ticker] = Stock(ticker)
         self.thread_lock.release()
 
     def remove_ticker(self, ticker):
@@ -156,7 +231,7 @@ class StockSocket:
 
         No error if given ticker is not being tracked by websocket.
         '''
-        ws = create_connection("wss://api.tiingo.com/iex")
+        ws = create_connection(TIINGO_BASE_URL)
         payload = {
             'eventName': 'unsubscribe',
             'authorization': TIINGO_KEY,
@@ -166,7 +241,7 @@ class StockSocket:
             }
         }
         ws.send(json.dumps(payload))
-        print(ws.recv())
+        print(f"Removed {ticker}")
 
 
 def monitor(tickers):
@@ -187,4 +262,4 @@ def monitor(tickers):
     stock_socket.remove_ticker('aapl')
 
 
-monitor(["spy", "gme"])
+# monitor(["spy", "avgo", "c", "dis", "gpro", "nvda", "pfe", "pltr", "gme"])
