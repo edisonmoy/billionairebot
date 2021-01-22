@@ -106,17 +106,6 @@ class Stock:
         self.ask_price = res.get("askSize")
         return res
 
-    def moving_avg(self, window, age=20):
-        '''
-        Compute moving average given WINDOW.
-        Window: 5,10,30,60min. 1,2,5,10,20day.
-
-        Output array of moving averages from now to AGE samples back.
-        '''
-        id = str(uuid.uuid4())
-
-        return
-
     def plot_price(self, days):
         '''
         Plot price over given DAYS.
@@ -130,7 +119,7 @@ class Stock:
         plt.show()
         return
 
-    def plot_sma(self, short_term, long_term, num_days):
+    def plot_moving_avg(self, short_term, long_term, num_days, model_type="SMA"):
         '''
         Plot moving average given short SMA, long SMA and num samples
         '''
@@ -139,17 +128,23 @@ class Stock:
         sma_short = f"{short_term}_SMA"
         sma_long = f"{long_term}_SMA"
 
-        # Calculate Simple Moving Avgs
-        df[sma_short] = df["adjusted close"].rolling(
-            window=short_term, min_periods=1).mean()
-        df[sma_long] = df["adjusted close"].rolling(
-            window=long_term, min_periods=1).mean()
+        # Calculate  Moving Avgs
+        if (model_type == "EMA"):
+            df[sma_short] = df["adjusted close"].ewm(
+                span=short_term, adjust=False).mean()
+            df[sma_long] = df["adjusted close"].ewm(
+                span=long_term, adjust=False).mean()
+        else:
+            df[sma_short] = df["adjusted close"].rolling(
+                window=short_term, min_periods=1).mean()
+            df[sma_long] = df["adjusted close"].rolling(
+                window=long_term, min_periods=1).mean()
 
         # Generate signals
         df['Signal'] = 0.0
         df['Signal'] = np.where(
-            df[sma_short] < df[sma_long], 1.0, 0.0)
-        df["Position"] = df["Signal"].diff()
+            df[sma_short] > df[sma_long], 1.0, 0.0)
+        df["Position"] = 0.0 - df["Signal"].diff()
 
         # Set up plot
         fig = plt.figure()
@@ -183,7 +178,7 @@ class Stock:
 x = Stock("gme")
 x.update()
 # x.plot_price(200)
-x.plot_sma(10, 50, 500)
+x.plot_moving_avg(10, 50, 200, "SMA")
 
 
 class StockSocket:
