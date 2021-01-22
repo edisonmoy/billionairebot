@@ -130,7 +130,7 @@ class Stock:
         plt.show()
         return
 
-    def plot_moving_avg(self, short_term, long_term, num_days):
+    def plot_sma(self, short_term, long_term, num_days):
         '''
         Plot moving average given short SMA, long SMA and num samples
         '''
@@ -145,18 +145,32 @@ class Stock:
         df[sma_long] = df["adjusted close"].rolling(
             window=long_term, min_periods=1).mean()
 
+        # Generate signals
+        df['Signal'] = 0.0
+        df['Signal'] = np.where(
+            df[sma_short] < df[sma_long], 1.0, 0.0)
+        df["Position"] = df["Signal"].diff()
+
         # Set up plot
         fig = plt.figure()
         fig.show()
         ax = fig.add_subplot(111)
 
         # Plot values
-        ax.plot(df["date"], df[sma_long], c='b',
-                label=sma_long, fillstyle='none')
-        ax.plot(df["date"], df[sma_short], c='g',
-                label=sma_short, fillstyle='none')
-        ax.plot(df["date"], df["adjusted close"], c='r',
-                label='Close', fillstyle='none')
+        ax.plot(df["date"], df[sma_long], c='blue',
+                label=sma_long, lw=1)
+        ax.plot(df["date"], df[sma_short], c='green',
+                label=sma_short, lw=1)
+        ax.plot(df["date"], df["adjusted close"], c='black',
+                label='Close', lw=1)
+
+        # Plot signals
+        ax.plot(df[df["Position"] == 1]["date"],
+                df[sma_short][df["Position"] == 1],
+                marker="^",  color="g", label='Buy', ls="None")
+        ax.plot(df[df["Position"] == -1]["date"],
+                df[sma_short][df["Position"] == -1],
+                marker="v", color="r", label='Sell', ls="None")
 
         # Add labels
         plt.ylabel("Price")
@@ -166,10 +180,10 @@ class Stock:
         plt.show()
 
 
-x = Stock("aapl")
+x = Stock("gme")
 x.update()
-x.plot_price(200)
-x.plot_moving_avg(20, 100, 500)
+# x.plot_price(200)
+x.plot_sma(10, 50, 500)
 
 
 class StockSocket:
