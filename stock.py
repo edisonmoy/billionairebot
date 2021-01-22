@@ -9,17 +9,44 @@ from alpaca_trade_api import StreamConn
 
 load_dotenv()
 SOCKET = "wss://data.alpaca.markets/stream"
-AP_KEY = os.getenv("ALPACA_KEY")
-APS_KEY = os.getenv("ALPACA_SECRET_KEY")
+AP_KEY = os.getenv("ALPACA_PAPER_KEY")
+APS_KEY = os.getenv("ALPACA_PAPER_SECRET_KEY")
 AP_PAPER_URL = "https://paper-api.alpaca.markets"
 
+class Account:
+    # Getting the account info
+    def __init__(self):
+        self.acc_api = tradeapi.REST(AP_KEY, APS_KEY, AP_PAPER_URL)
+        self.acc = self.acc_api.get_account()
+        if self.acc.trading_blocked:
+            print("not able to trade")
+    
+    #checking how much we have in our account
+    def check_balance(self):
+        print("${} available to trade.".format(self.acc.buying_power))
+
+    #daily profit
+    def check_profit(self):
+        change = float(self.acc.equity) - float(self.acc.last_equity)
+        print(f'Today\'s portfolio balance change: ${change}')
+    
+
+
+
+    
 class Trading:
     def __init__(self):
-        self.api = tradeapi.REST('<key_id>', '<secret_key>', AP_PAPER_URL)
+        self.api = tradeapi.REST(AP_KEY, APS_KEY, AP_PAPER_URL)
     
     def trade(self):
         print('hello')
 
+    def tradable(self, ticker):
+        asset = self.api.get_asset(ticker)
+        if asset.tradable:
+            print("yes we can trade")
+        else:
+            print("can't trade")
 
 #testing streaming data
 
@@ -46,8 +73,7 @@ def close(ws):
 
 
 
-ws = websocket.WebSocketApp(SOCKET, on_open=open, on_message=response, on_close=close)
-ws.run_forever()
-
-# tradingbot = Trading()
-# tradingbot.trade()
+# ws = websocket.WebSocketApp(SOCKET, on_open=open, on_message=response, on_close=close)
+# ws.run_forever()
+account = Trading()
+account.tradable("MSFT")
