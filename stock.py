@@ -38,9 +38,20 @@ class Trading:
     def __init__(self):
         self.api = tradeapi.REST(AP_KEY, APS_KEY, AP_PAPER_URL)
     
-    def trade(self):
-        print('hello')
-
+    def trade(self,ticker, num_of_shares, buy_or_sell, t):
+        self.api.submit_order(
+            symbol= ticker,
+            qty = num_of_shares,
+            side = buy_or_sell,
+            type = t,
+            time_in_force = "gtc"
+        )
+    #dummy function to test 
+    def get_nasdaq_stocks(self):
+        nasdaq = [i for i in self.api.list_assets(status="active") if i.exchange == "NASDAQ"]
+        print(nasdaq)    
+    
+    #checking if the stock is tradable or not
     def tradable(self, ticker):
         asset = self.api.get_asset(ticker)
         if asset.tradable:
@@ -76,4 +87,4 @@ def close(ws):
 # ws = websocket.WebSocketApp(SOCKET, on_open=open, on_message=response, on_close=close)
 # ws.run_forever()
 account = Trading()
-account.tradable("MSFT")
+account.trade("GME", 1000, "buy", "market")
