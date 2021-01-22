@@ -32,7 +32,7 @@ def open(ws):
 
     ws.send(json.dumps(ws_stream_conn))
 
-    listen_message = {"data": {"streams": ["AM.PLTR"]}}
+    listen_message = {"action": "listen", "data": {"streams": ["T.PLTR"]}}
 
     ws.send(json.dumps(listen_message))
 
@@ -46,8 +46,8 @@ def close(ws):
 
 
 
-# ws = websocket.WebSocketApp(SOCKET, on_open=open, on_message=response, on_close=close)
-# ws.run_forever()
+ws = websocket.WebSocketApp(SOCKET, on_open=open, on_message=response, on_close=close)
+ws.run_forever()
 
-tradingbot = Trading()
-tradingbot.trade()
+# tradingbot = Trading()
+# tradingbot.trade()
